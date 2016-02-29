@@ -36,7 +36,7 @@ typedef void (*mill_timer_callback)(struct mill_timer *timer);
 struct mill_timer {
     /* Item in the global list of all timers. */
     struct mill_list_item item;
-    /* The deadline when the timer expires. */
+    /* The deadline when the timer expires. -1 if the timer is not active. */
     int64_t expiry;
     /* Callback invoked when timer expires. Pfui Teufel! */
     mill_timer_callback callback;

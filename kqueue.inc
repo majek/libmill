@@ -270,9 +270,10 @@ static int mill_poller_wait(int timeout) {
         int fd = chl - 1;
         struct mill_crpair *crp = &mill_crpairs[fd];
         if(crp->in == crp->out) {
+            struct mill_cr *cr = crp->in;
             mill_assert(crp->in);
-            mill_resume(crp->in, crp->firing);
-            crp->in->fd = -1;
+            mill_resume(cr, crp->firing);
+            cr->fd = -1;
             crp->in = NULL;
             crp->out = NULL;
             if(mill_timer_enabled(&cr->timer))
@@ -280,15 +281,17 @@ static int mill_poller_wait(int timeout) {
         }
         else {
             if(crp->in) {
-                mill_resume(crp->in, crp->firing & (FDW_IN | FDW_ERR));
-                crp->in->fd = -1;
+                struct mill_cr *cr = crp->in;
+                mill_resume(cr, crp->firing & (FDW_IN | FDW_ERR));
+                cr->fd = -1;
                 crp->in = NULL;
                 if(mill_timer_enabled(&cr->timer))
                     mill_timer_rm(&cr->timer);
             }
             if(crp->out) {
-                mill_resume(crp->out, crp->firing & (FDW_OUT | FDW_ERR));
-                crp->out->fd = -1;
+                struct mill_cr *cr = crp->out;
+                mill_resume(cr, crp->firing & (FDW_OUT | FDW_ERR));
+                cr->fd = -1;
                 crp->out = NULL;
                 if(mill_timer_enabled(&cr->timer))
                     mill_timer_rm(&cr->timer);
