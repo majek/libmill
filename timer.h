@@ -42,6 +42,9 @@ struct mill_timer {
     mill_timer_callback callback;
 };
 
+/* Test wheather the timer is active. */
+#define mill_timer_enabled(tm)  ((tm)->expiry >= 0)
+
 /* Add a timer for the running coroutine. */
 void mill_timer_add(struct mill_timer *timer, int64_t deadline,
     mill_timer_callback callback);

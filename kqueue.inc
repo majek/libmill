@@ -135,12 +135,18 @@ static void mill_poller_add(int fd, int events) {
     }
 }
 
-static void mill_poller_rm(int fd, int events) {
+static void mill_poller_rm(struct mill_cr *cr) {
+    int fd = cr->fd;
+    mill_assert(fd != -1);
     struct mill_crpair *crp = &mill_crpairs[fd];
-    if(events & FDW_IN)
+    if(crp->in == cr) {
         crp->in = NULL;
-    if(events & FDW_OUT)
+        cr->fd = -1;
+    }
+    if(crp->out == cr) {
         crp->out = NULL;
+        cr->fd = -1;
+    }
     if(!crp->next) {
         crp->next = mill_changelist;
         mill_changelist = fd + 1;
@@ -266,17 +272,26 @@ static int mill_poller_wait(int timeout) {
         if(crp->in == crp->out) {
             mill_assert(crp->in);
             mill_resume(crp->in, crp->firing);
+            crp->in->fd = -1;
             crp->in = NULL;
             crp->out = NULL;
+            if(mill_timer_enabled(&cr->timer))
+                mill_timer_rm(&cr->timer);
         }
         else {
             if(crp->in) {
                 mill_resume(crp->in, crp->firing & (FDW_IN | FDW_ERR));
+                crp->in->fd = -1;
                 crp->in = NULL;
+                if(mill_timer_enabled(&cr->timer))
+                    mill_timer_rm(&cr->timer);
             }
             if(crp->out) {
                 mill_resume(crp->out, crp->firing & (FDW_OUT | FDW_ERR));
+                crp->out->fd = -1;
                 crp->out = NULL;
+                if(mill_timer_enabled(&cr->timer))
+                    mill_timer_rm(&cr->timer);
             }
         }
         crp->firing = 0;

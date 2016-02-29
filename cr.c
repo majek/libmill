@@ -163,6 +163,7 @@ void *mill_go_prologue(const char *created) {
     cr->valbuf = NULL;
     cr->valbuf_sz = 0;
     cr->cls = NULL;
+    cr->timer.expiry = -1;
     cr->fd = -1;
     cr->events = 0;
     mill_trace(created, "{%d}=go()", (int)cr->debug.id);
