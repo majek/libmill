@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <assert.h>
 #include <stdio.h>
+#include <sys/wait.h>
 
 #include "../libmill.h"
 
@@ -44,6 +45,8 @@ coroutine void dummy(void) {
 
 int main() {
     goprepare(10, 25000, 300);
+
+    /* Try few coroutines with pre-prepared stacks. */
     assert(errno == 0);
     go(worker(3, 7));
     go(worker(1, 11));
@@ -56,6 +59,16 @@ int main() {
     for(i = 0; i != 20; ++i)
         go(dummy());
     msleep(now() + 100);
+
+    /* Try to fork the process. */
+    pid_t pid = mfork();
+    assert(pid != -1);
+    if(pid > 0) {
+        int status;
+        pid = waitpid(pid, &status, 0);
+        assert(pid != -1);
+        assert(WIFEXITED(status));
+    }
 
     return 0;
 }

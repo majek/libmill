@@ -26,10 +26,12 @@
 #define LIBMILL_H_INCLUDED
 
 #include <errno.h>
+#include <setjmp.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 /******************************************************************************/
 /*  ABI versioning support                                                    */
@@ -41,13 +43,13 @@
 /*  www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html  */
 
 /*  The current interface version. */
-#define MILL_VERSION_CURRENT 14
+#define MILL_VERSION_CURRENT 15
 
 /*  The latest revision of the current interface. */
-#define MILL_VERSION_REVISION 0
+#define MILL_VERSION_REVISION 1
 
 /*  How many past interface versions are still supported. */
-#define MILL_VERSION_AGE 2
+#define MILL_VERSION_AGE 0
 
 /******************************************************************************/
 /*  Symbol visibility                                                         */
@@ -89,8 +91,10 @@ MILL_EXPORT void goprepare(int count, size_t stack_size, size_t val_size);
 MILL_EXPORT extern volatile int mill_unoptimisable1;
 MILL_EXPORT extern volatile void *mill_unoptimisable2;
 
-MILL_EXPORT void *mill_go_prologue(const char *created);
-MILL_EXPORT void mill_go_epilogue(void);
+MILL_EXPORT sigjmp_buf *mill_getctx(void);
+MILL_EXPORT __attribute__((noinline)) void *mill_go_prologue(
+    const char *created);
+MILL_EXPORT __attribute__((noinline)) void mill_go_epilogue(void);
 
 #define mill_string2(x) #x
 #define mill_string(x) mill_string2(x)
@@ -98,13 +102,14 @@ MILL_EXPORT void mill_go_epilogue(void);
 #if defined __GNUC__ || defined __clang__
 #define coroutine __attribute__((noinline))
 #else
-#define coroutine
+#error "Unsupported compiler!"
 #endif
 
 #define go(fn) \
     do {\
-        void *mill_sp = mill_go_prologue(__FILE__ ":" mill_string(__LINE__));\
-        if(mill_sp) {\
+        void *mill_sp;\
+        if(!sigsetjmp(*mill_getctx(), 0)) {\
+            mill_sp = mill_go_prologue(__FILE__ ":" mill_string(__LINE__));\
             int mill_anchor[mill_unoptimisable1];\
             mill_unoptimisable2 = &mill_anchor;\
             char mill_filler[(char*)&mill_anchor - (char*)(mill_sp)];\

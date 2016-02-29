@@ -26,6 +26,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#if defined MILL_VALGRIND
+#include <valgrind/valgrind.h>
+#endif
+
 #include "cr.h"
 #include "debug.h"
 #include "libmill.h"
@@ -99,7 +103,7 @@ int mill_suspend(void) {
         counter = 0;
     }
     /* Store the context of the current coroutine, if any. */
-    if(mill_running && mill_setjmp(&mill_running->ctx))
+    if(mill_running && sigsetjmp(mill_running->ctx, 0))
         return mill_running->result;
     while(1) {
         /* If there's a coroutine ready to be executed go for it. */
@@ -107,7 +111,7 @@ int mill_suspend(void) {
             ++counter;
             struct mill_slist_item *it = mill_slist_pop(&mill_ready);
             mill_running = mill_cont(it, struct mill_cr, ready);
-            mill_jmp(&mill_running->ctx);
+            siglongjmp(mill_running->ctx, 1);
         }
         /* Otherwise, we are going to wait for sleeping coroutines
            and for external events. */
@@ -123,14 +127,38 @@ void mill_resume(struct mill_cr *cr, int result) {
     mill_slist_push_back(&mill_ready, &cr->ready);
 }
 
+/* dill_prologue() and dill_epilogue() live in the same scope with
+   libdill's stack-switching black magic. As such, they are extremely
+   fragile. Therefore, the optimiser is prohibited to touch them. */
+#if defined __clang__
+#define dill_noopt __attribute__((optnone))
+#elif defined __GNUC__
+#define dill_noopt __attribute__((optimize("O0")))
+#else
+#error "Unsupported compiler!"
+#endif
+
+sigjmp_buf *mill_getctx(void) {
+    return &mill_running->ctx;
+}
+
 /* The intial part of go(). Starts the new coroutine.
    Returns the pointer to the top of its stack. */
+__attribute__((noinline)) dill_noopt
 void *mill_go_prologue(const char *created) {
     /* Ensure that debug functions are available whenever a single go()
        statement is present in the user's code. */
     mill_preserve_debug();
     /* Allocate and initialise new stack. */
-    struct mill_cr *cr = ((struct mill_cr*)mill_allocstack()) - 1;
+#if defined MILL_VALGRIND
+    size_t stack_size;
+    struct mill_cr *cr = ((struct mill_cr*)mill_allocstack(&stack_size));
+    int sid = VALGRIND_STACK_REGISTER(((char*)cr) - stack_size, cr);
+    --cr;
+    cr->sid = sid;
+#else
+    struct mill_cr *cr = ((struct mill_cr*)mill_allocstack(NULL)) - 1;
+#endif
     mill_register_cr(&cr->debug, created);
     cr->valbuf = NULL;
     cr->valbuf_sz = 0;
@@ -139,8 +167,6 @@ void *mill_go_prologue(const char *created) {
     cr->events = 0;
     mill_trace(created, "{%d}=go()", (int)cr->debug.id);
     /* Suspend the parent coroutine and make the new one running. */
-    if(mill_setjmp(&mill_running->ctx))
-        return NULL;
     mill_resume(mill_running, 0);    
     mill_running = cr;
     /* Return pointer to the top of the stack. There's valbuf interposed
@@ -149,11 +175,15 @@ void *mill_go_prologue(const char *created) {
 }
 
 /* The final part of go(). Cleans up after the coroutine is finished. */
+__attribute__((noinline)) dill_noopt
 void mill_go_epilogue(void) {
     mill_trace(NULL, "go() done");
     mill_unregister_cr(&mill_running->debug);
     if(mill_running->valbuf)
         free(mill_running->valbuf);
+#if defined MILL_VALGRIND
+    VALGRIND_STACK_DEREGISTER(mill_running->sid);
+#endif
     mill_freestack(mill_running + 1);
     mill_running = NULL;
     /* Given that there's no running coroutine at this point
