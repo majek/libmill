@@ -28,6 +28,8 @@
 #include <sys/eventfd.h>
 #endif
 
+#define __sun
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
@@ -47,8 +49,8 @@
 #include "libmill.h"
 #include "utils.h"
 
-MILL_CT_ASSERT(sizeof(ipaddr) >= sizeof(struct sockaddr_in));
-MILL_CT_ASSERT(sizeof(ipaddr) >= sizeof(struct sockaddr_in6));
+/* MILL_CT_ASSERT(sizeof(ipaddr) >= sizeof(struct sockaddr_in)); */
+/* MILL_CT_ASSERT(sizeof(ipaddr) >= sizeof(struct sockaddr_in6)); */
 
 static struct dns_resolv_conf *mill_dns_conf = NULL;
 static struct dns_hosts *mill_dns_hosts = NULL;
